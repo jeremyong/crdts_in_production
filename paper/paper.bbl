@@ -1,0 +1,19 @@
+\begin{thebibliography}{1}
+
+\bibitem{riak2013}
+Basho.
+\newblock Counters in riak 1.4.
+\newblock \url{http://basho.com/counters-in-riak-1-4/}, 2013.
+
+\bibitem{letia2009crdts}
+Mihai Letia, Nuno Pregui{\c{c}}a, and Marc Shapiro.
+\newblock Crdts: Consistency without concurrency control.
+\newblock {\em arXiv preprint arXiv:0907.0929}, 2009.
+
+\bibitem{shapiro2011convergent}
+Marc Shapiro, Nuno Pregui{\c{c}}a, Carlos Baquero, Marek Zawirski, P~Fatourou,
+  et~al.
+\newblock Convergent and commutative replicated data types.
+\newblock {\em Bulletin of the EATCS}, (104):67--88, 2011.
+
+\end{thebibliography}

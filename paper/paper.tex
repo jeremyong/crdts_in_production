@@ -1,0 +1,258 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Journal Article
+% LaTeX Template
+% Version 1.3 (9/9/13)
+%
+% This template has been downloaded from:
+% http://www.LaTeXTemplates.com
+%
+% Original author:
+% Frits Wenneker (http://www.howtotex.com)
+%
+% License:
+% CC BY-NC-SA 3.0 (http://creativecommons.org/licenses/by-nc-sa/3.0/)
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%----------------------------------------------------------------------------------------
+%	PACKAGES AND OTHER DOCUMENT CONFIGURATIONS
+%----------------------------------------------------------------------------------------
+
+\documentclass[twoside]{article}
+
+\usepackage{cite}
+
+\usepackage{lipsum} % Package to generate dummy text throughout this template
+
+\usepackage[sc]{mathpazo} % Use the Palatino font
+\usepackage[T1]{fontenc} % Use 8-bit encoding that has 256 glyphs
+\linespread{1.05} % Line spacing - Palatino needs more space between lines
+\usepackage{microtype} % Slightly tweak font spacing for aesthetics
+
+\usepackage[hmarginratio=1:1,top=32mm,columnsep=20pt]{geometry} % Document margins
+\usepackage{multicol} % Used for the two-column layout of the document
+\usepackage[hang, small,labelfont=bf,up,textfont=it,up]{caption} % Custom captions under/above floats in tables or figures
+\usepackage{booktabs} % Horizontal rules in tables
+\usepackage{float} % Required for tables and figures in the multi-column environment - they need to be placed in specific locations with the [H] (e.g. \begin{table}[H])
+\usepackage{hyperref} % For hyperlinks in the PDF
+
+\usepackage{lettrine} % The lettrine is the first enlarged letter at the beginning of the text
+\usepackage{paralist} % Used for the compactitem environment which makes bullet points with less space between them
+
+\usepackage{abstract} % Allows abstract customization
+\renewcommand{\abstractnamefont}{\normalfont\bfseries} % Set the "Abstract" text to bold
+\renewcommand{\abstracttextfont}{\normalfont\small\itshape} % Set the abstract itself to small italic text
+
+\usepackage{titlesec} % Allows customization of titles
+\renewcommand\thesection{\Roman{section}} % Roman numerals for the sections
+\renewcommand\thesubsection{\Roman{subsection}} % Roman numerals for subsections
+\titleformat{\section}[block]{\large\scshape\centering}{\thesection.}{1em}{} % Change the look of the section titles
+\titleformat{\subsection}[block]{\large}{\thesubsection.}{1em}{} % Change the look of the section titles
+
+\usepackage{fancyhdr} % Headers and footers
+\pagestyle{fancy} % All pages have headers and footers
+\fancyhead{} % Blank out the default header
+\fancyfoot{} % Blank out the default footer
+\fancyhead[C]{October 2013} % Custom header text
+\fancyfoot[RO,LE]{\thepage} % Custom footer text
+
+%----------------------------------------------------------------------------------------
+%	TITLE SECTION
+%----------------------------------------------------------------------------------------
+
+\title{\vspace{-15mm}\fontsize{24pt}{10pt}\selectfont\textbf{CRDTs in Production}} % Article title
+
+\author{
+\large
+\textsc{Jeremy Ong}\\[2mm] % Your name
+\vspace{-5mm}
+}
+\date{}
+
+%----------------------------------------------------------------------------------------
+
+\begin{document}
+
+\maketitle % Insert title
+
+\thispagestyle{fancy} % All pages have headers and footers
+
+%----------------------------------------------------------------------------------------
+%	ABSTRACT
+%----------------------------------------------------------------------------------------
+
+\begin{abstract}
+
+\noindent TODO
+
+\end{abstract}
+
+%----------------------------------------------------------------------------------------
+%	ARTICLE CONTENTS
+%----------------------------------------------------------------------------------------
+
+\begin{multicols}{2} % Two-column layout throughout the main article text
+
+\section{Introduction}
+
+\lettrine[nindent=0em,lines=3]{T} here has been increasing interest in
+the usage of CRDTs in environments of relaxed temporal
+constraints. With the maturity of several distributed AP databases,
+developers now have a choice to emphasize availability in exchange for
+immediate consistency. These databases necessarily require distributed
+data to be subject to possible logical inconsistencies due to presence
+of multiple writers and readers in addition to replication
+latency. CRDTs, commutative or convergent replicated data types, offer
+a formal and structured approach to ensuring eventual consistency by
+enforcing the following conditions: termination, eventual effect, and
+convergence \cite{shapiro2011convergent}. Many CRDTs have been
+identified of varying complexities and applicability (e.g. treedoc,
+registers, pn-counters) \cite{letia2009crdts, shapiro2011convergent}.
+
+However, adoption of these CRDTs into production databases has been
+slow. In addition, it is not always practical to represent every
+application-sensitive database object as a CRDT. While it is likely
+that all objects can be represented as a set of disjoint CRDTs, this
+can exacerbate the logical divergence of inter-key relationships due
+to a lack of multi-key transactions.
+
+A more pragmatic approach is to employ application level custom
+convergence code, modeled after CRDT concepts to manage
+conflict. Because of the generalized nature of this technique, it can
+be difficult to formalize. This write-up intends to discuss various
+common scenarios and show how by relaxing certain constraints,
+behavior very close to a CRDT can be observed. In situations where
+operations must be applied that cannot commute, mitigation strategies
+are introduced that reduce the operation in question to a delayed
+transaction.
+
+%------------------------------------------------
+
+\section{Preliminaries}
+
+Let $x\in X$ denote an object in application space and
+$f \in F:X \rightarrow X$ an operation that acts on an element of
+$X$. Two versions of the same object are differentiated by subscript.
+The causal history of an object $x$, $C(x)$ is defined as a set of
+operations in terms of the following properties:
+\begin{enumerate}
+  \item Initially, the causal history is an empty set: $C(x_0) = \emptyset$
+  \item A single atomic update augments the causal history: $C(x_{i+1}) =
+    C(x_i)\cup \left\{f\right\}$
+  \item The causal history of a merged object is the union of causal
+    history of the objects merged: $C(x_i\cup x_j) = C(x_i)\cup C(x_j)$
+\end{enumerate}
+We can define a partial ordering on objects in $X$ based on causal
+histories.
+\[ x_i \leq x_j \Leftrightarrow C\left(x_i\right) \subset C\left(x_j\right) \]
+In words, this means that all operations that have occurred to $x_i$
+have also occurred to $x_j$.
+
+CRDTs themselves are divided into two categories: CvRDTs (convergent
+replicated data types) are state based while CmRDTs (commutative
+replicated data types) are operation based. When clients request
+an operation to be applied, they must first retrieve a replica on
+which base the request (termed the source replica). The operation is
+then applied either at the source (CvRDT) or downstream for all
+replicas of that object (CmRDT). The at-source and downstream phases
+are subject to preconditions. Both CvRDTs and CmRDTS must satisfy
+the following conditions in the traditional definition of a CRDT
+\cite{shapiro2011convergent}:
+
+\begin{enumerate}
+  \item Termination: The at-source and downstream phases terminate
+    when preconditions are satisfied
+  \item Eventual Effect:
+    \[\forall i \exists j \ni x_j \leq x_k \Leftrightarrow f\in C\left(x_i\right) \Rightarrow f\in C\left(x_k\right) \]
+    Colloquially, if an operation is performed on an object, that
+    operation will eventually exist in the causal history of all replicas.
+  \item Convergence:
+    \[C\left(x_i\right) = C\left(x_j\right) \Rightarrow x_i \equiv x_j\]
+    Replicas with identical histories contain the same state.
+\end{enumerate}
+
+%------------------------------------------------
+
+\section{Managing Consistency in Practice}
+
+This paper is restricted to circumstances in which the
+developer has already made the tradeoff of leaning towards
+availability and relaxing temporal consistency in selecting a
+database. Otherwise, all operations would be wrapped in a transaction
+for which immediate consistency is guaranteed. Given this tradeoff,
+there are several alternatives that should also be considered before
+immediately implementing any merge strategy.
+
+First, the developer has an option to serialize all writes to a
+particular object in a single queue. In practice, this will guarantee
+immediate consistency again but at the cost of availability gained at
+the database level. Nevertheless, this may be useful if immediate
+consistency is only needed for a small fraction of the keys for which
+availability is less important. If this strategy is to be used on the
+majority of keys, the developer is better off choosing a CP database.
+Second, the developer has the option to implement a locking
+system. This is similar to the first technique but allows the locking
+layer to be scaled independently of the writers which may be
+distributed across many machines.
+
+In general, because there is no easy way to manage multi-key
+transactions in an eventually consistent setting, correlated data must
+be denormalized in a single key value pair. For example, if an
+operation to $x \in X$ is contingent on the result of an operation on
+$y \in Y$, the developer is better off denormalizing $X$ and $Y$ into
+a single object type $Z = X \times Y$ rather than attempting to
+coordinate the logical dependency.
+
+A merge strategy can be useful if the data in question exhibits low
+merge intensity. Qualitatively, merge intensity corresponds to the
+fraction of writes that will resolve in the formation of
+replicas. Factors that correspond to low merge intensity include:
+\begin{compactitem}
+  \item Low write frequency to a single key for a given writer
+  \item Few writers to a single key
+  \item Short timespan between a key read and subsequent write
+\end{compactitem}
+Conversely, factors that correspond to high merge intensity include:
+\begin{compactitem}
+  \item Low write frequency to a single key for a given writer
+  \item Few writers to a single key
+  \item Short timespan between a key read and subsequent write
+\end{compactitem}
+By restricting the usage of a custom merge strategy to cases where
+merge intensity is low, the developer avoids scenarios where merges
+become inefficient or even impossible in certain scenarios.
+
+Instead of a custom merge strategy of course, the developer may use
+one of the canonical CRDTs. In practice, CRDTs are rarely implemented
+at the database level, although database companies are beginning to
+incorporate the simpler ones. At the time of this writing, Riak has
+implemented a PN-counter for example \cite{riak2013} with more data
+types on the way. Unfortunately, application data still exhibits more
+complexity than can be handled natively with most databases, so we are
+restricted with handling operations and merge logic on the application
+side. In addition, not all application operations commute in general,
+and yet these operations must still occur. Incorporating such
+operations in the data model will require the relaxation on some of
+the canonical CRDT constraints.
+
+%------------------------------------------------
+
+\section{Relaxing CRDT Constraints}
+
+
+
+\section{Discussion}
+\section{Conclusion}
+
+%----------------------------------------------------------------------------------------
+%	REFERENCE LIST
+%----------------------------------------------------------------------------------------
+
+\bibliography{paper}{}
+\bibliographystyle{plain}
+
+%----------------------------------------------------------------------------------------
+
+\end{multicols}
+
+\end{document}
