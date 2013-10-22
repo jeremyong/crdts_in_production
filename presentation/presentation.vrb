@@ -1,0 +1,19 @@
+\frametitle{When things don't commute}
+The function \texttt{AddToCart} behaves nicely because it
+  commutes. What about something like \texttt{RemoveFromCart}?
+  \pause
+  \small
+\begin{verbatim}
+void RemoveFromCart(Cart &cart,
+                    const Item &item) {
+    if (cart.HasItem(item)) {
+        ... item removal code
+    } else {
+        // What should I do here?
+\end{verbatim}
+\pause
+\begin{verbatim}
+        // nothing
+    }
+}
+\end{verbatim}

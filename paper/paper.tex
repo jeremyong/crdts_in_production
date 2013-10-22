@@ -239,7 +239,24 @@ the canonical CRDT constraints.
 
 \section{Relaxing CRDT Constraints}
 
-
+Instead of the strict CRDT constraints imposed on the canonical CRDTs,
+I present here a set of relaxed constraints for a more general type of
+CRDT. First, adding to notation introduced previously, let
+$\overline{f}$ represent an operation attempt that may or may not
+complete successfully depending on some set of conditions specific to
+the operation $f$.
+\begin{enumerate}
+  \item Termination: as before
+  \item Eventual Effect:
+    \[\forall i\exists j\ni x_j\leq x_k \Leftrightarrow f\in
+    C\left(x_i\right) \Rightarrow \overline{f}\in C\left(x_k\right) \]
+    If an operation is performed on an object, the attempt to perform
+    that operation will exist in the causal history of all replicas
+  \item All or nothing:
+    An operation will either succeed with side effects, or fail with
+    no side effects
+\end{enumerate}
+The main differences are a relaxation of the eventual effect
 
 \section{Discussion}
 \section{Conclusion}
